@@ -5,13 +5,14 @@
 You can find the contents of the directories in this repository below.
 
 ## Contact
-Su Doga Karaca
+Su Doga Karaca\
 sudogakaraca@uchicago.edu
 
 ## Repository Structure
 
 ### base_regression
-This directory contains the project analysis code for the regression results reported in the Results section of the paper. There are multiple directories and files locacted in this directory each with their individual goal. Model_Trials Excel file contains the training, validation, and test results of multiple fine-tuning procedures with different parameters used. only_test_data directory contains all the analysis code reported in the paper. You can access the pre-processing code, the R script used to run the regression analyses, and the liwc_data obtained from the model used and LIWC. The regression_analysis.html links to the regression results and tables reported in the paper. dataframes directory leads to all the data obtained from the preprocessing and used in the analyses.
+This directory contains the project analysis code for the regression results reported in the Results section of the paper. There are multiple directories and files locacted in this directory each with their individual goal. Model_Trials Excel file contains the training, validation, and test results of multiple fine-tuning procedures with different parameters used. For additional model testing reporting, visit: [link](https://docs.google.com/presentation/d/1zZZQtVw_JLK0OP8GE75Sd5blRpGbDO0Y134QUFte4bg/edit?usp=sharing)
+only_test_data directory contains all the analysis code reported in the paper. You can access the pre-processing code, the R script used to run the regression analyses, and the liwc_data obtained from the model used and LIWC. The regression_analysis.html links to the regression results and tables reported in the paper. dataframes directory leads to all the data obtained from the preprocessing and used in the analyses.
 
 ### correlation
 This directory contains the project analysis code for the correlation results reported in the Results section of the paper. There are multiple directories and files locacted in this directory each with their individual goal. In the notebook you can see the correlation matrix codes and the correlation tables reported. In the correlation analysis, normalized version of the liwc_data reported in the base_regression directory is used. This data is contained in the z_score_extremity.csv file.
