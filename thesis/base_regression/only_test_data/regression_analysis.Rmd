@@ -1,0 +1,247 @@
+---
+title: "Semantic Analyses"
+output: html_document
+---
+
+```{r echo = FALSE, warning=FALSE, message=FALSE}
+rm(list=(ls()))
+
+######################################################################## 
+#                               Load Packages                          #
+########################################################################
+library(plyr)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(car)
+library(Hmisc)  
+library(lmerTest) 
+library(broom)
+library(cowplot)
+library(ridge)
+library(readr)
+library(lmridge)
+library(rtf)
+
+###################### Script Specific Functions #######################
+asNumeric <- function(x) as.numeric(as.character(x))
+factorsNumeric <- function(d) modifyList(d, lapply(d[, sapply(d, is.factor)],   
+                                                   asNumeric))
+sem <- 
+  function(x) {sd(x,na.rm = T) / sqrt(length(x))}
+
+myPalette <- c("#4C72B0","#C44E52")
+
+redo_calc = 0;
+```
+
+
+```{r data_preprocessing, fig.width = 6, fig.height= 2}
+######################################################################## 
+#                       Load and preprocess data                       #
+########################################################################
+# load data
+
+d0 = read_csv("liwc_data.csv")
+```
+
+### Rescale data
+```{r}
+# Subset the dataset to exclude the first two columns
+columns_to_scale <- d0[, -c(1, 2)]
+# Scale the subsetted columns
+scaled_columns = mutate_all(columns_to_scale, scale)
+# Combine the scaled columns with the first two columns
+d1 <- cbind(d0[, 1:2], scaled_columns)
+```
+
+### LME model with moral emotional terms only
+```{r fig.width = 4.5, fig.height = 4}
+res_extremity <- lm(Extremity ~ WC + MoralEmotional + UniquelyMoral + UniquelyEmotional, data = d1)
+summary(res_extremity)
+
+# 95% Confidence Interval
+# confint(res_extremity, method = "profile")[6:8,]
+
+# Calculate corrected p-values
+p_values_extremity <- summary(res_extremity)$coefficients[3:5, "Pr(>|t|)"]
+p.adjust(p_values_extremity, method = 'holm')
+```
+
+### Plot linear fits
+```{r fig.width = 4.4, fig.height = 7.2}
+# Get coefficients for the new model
+dwplot_data_extremity <- as.data.frame(summary(res_extremity)$coefficients)
+dwplot_data_extremity$Variable <- row.names(dwplot_data_extremity)
+
+# Get confidence intervals for the new model
+df_con_extremity <- as.data.frame(confint(res_extremity, method = "profile"))
+df_con_extremity$Variable <- row.names(df_con_extremity)
+
+# Merge coefficients and confidence intervals
+dwplot_data_extremity <- left_join(dwplot_data_extremity, df_con_extremity)
+dwplot_data_extremity <- filter(dwplot_data_extremity, Variable != '(Intercept)')
+dwplot_data_extremity$Variable <- factor(dwplot_data_extremity$Variable, levels = rev(c('MoralEmotional', 'UniquelyMoral', 'UniquelyEmotional','WC')))
+
+# Plot coefficients and confidence intervals
+ggplot(dwplot_data_extremity, aes(x = Variable, y = Estimate)) + 
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = `2.5 %`, ymax = `97.5 %`), width = 0.1) + 
+  geom_hline(yintercept = 0, linetype = 2, size = 1) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"),
+        axis.text.x  = element_text(size = 14, color = "black"),
+        axis.text.y  = element_text(size = 11.5, color = "black"),
+        axis.title.x = element_text(size = 14, color = "black"),
+        axis.title.y = element_blank(),
+        strip.background = element_blank()) +
+  coord_flip(ylim = c(-0.04, 0.052)) 
+```
+
+```{r}
+# Turn redo_calc true ("1") when you wanna update the datafile
+redo_calc = 1;
+```
+
+### Mass univariate test
+```{r}
+semantic_cat <- colnames(d1)[4:52]
+
+if (redo_calc) {
+mass.uni <- NULL
+    
+for (i in 1:length(semantic_cat)) {
+  fml <- as.formula(paste('Extremity', "~", paste(c("WC", semantic_cat[i], "(1 | label)"), collapse = "+")))
+  thisMod = lmer(fml, data = d1)
+  thisres = summary(thisMod)
+  thisCon = confint(thisMod, method = "profile", quiet = T)
+  thisCon = confint(thisMod, method = "profile", quiet = T)[5,]
+
+  this.uni = NULL
+  this.uni$Variable = semantic_cat[i]
+  this.uni$Estimate = thisres$coefficients[3,1]
+  this.uni$SE = thisres$coefficients[3,2]
+  this.uni$conf.low = thisCon[1]
+  this.uni$conf.hi = thisCon[2]
+  this.uni$df = thisres$coefficients[3,3]
+  this.uni$t = thisres$coefficients[3,4]
+  this.uni$p = thisres$coefficients[3,5]
+  
+  this.uni = as.data.frame(this.uni)
+  mass.uni = rbind(mass.uni,this.uni)
+  }
+    
+mass.uni = as.data.frame(mass.uni)
+
+mass.uni$p.adjust = p.adjust(mass.uni$p, method = 'holm')
+
+save(mass.uni, file="mass_uni.Rda")
+
+} else {
+
+  load("mass_uni.Rda")
+  
+}
+
+```
+
+### Plot Mass Uni Test
+```{r fig.height = 3.1, fig.width = 6.2}
+# Sort 
+mass.uni.sorted = mass.uni[order(mass.uni$Estimate, decreasing = TRUE),]
+mass.uni.sorted$Variable = factor(mass.uni.sorted$Variable, 
+                                     levels = mass.uni.sorted$Variable)
+
+ggplot(mass.uni.sorted, aes(x = Variable, y = Estimate)) +
+  geom_point(size = 1) +
+  geom_hline(yintercept = 0, linetype = 2, size = 1) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.hi), width = 0.5) +
+  theme_classic() +
+  theme(legend.position="none",
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(angle = 75, size = 8, hjust = 1),
+    axis.text.y = element_text(size = 10)) +
+  ylab('Coefficient')
+
+mass.uni.sorted.export = mass.uni.sorted %>%
+  mutate_if(is.numeric, round, digits=3) %>%
+  select(-c(conf.hi,conf.low,df))
+
+colnames(mass.uni.sorted.export) = c('Regressor', 'Coefficient', 'SE', 't', 'p','Corrected p')
+
+rtffile = RTF("mass_uni_test.doc")  # this can be an .rtf or a .doc
+addTable(rtffile, mass.uni.sorted.export)
+done(rtffile)
+  
+```
+
+### Ridge Regression Model
+```{r}
+d2 = d1 %>% select(-label) 
+
+# Use linearRidge to find lambda
+linearRidge_mod <- linearRidge(Extremity ~ ., d2)
+lambda <- linearRidge_mod$lambda[1]
+
+# note from YC: linearRidge tests for significance assuming normal distribution, which is asymptotically true for large datasets. Given that we only have 86 segments, this will likely be liberal. To err on the side of being conservative, we refit the model with lmridge, which assumes a t-distribution with n - trace(Hat) degrees of freedom
+# Refit the model with lmridge
+lmRidge_mod <- lmridge(Extremity ~ ., d2, K = lambda)
+summary(lmRidge_mod)
+lmRidge_res <- summary(lmRidge_mod)$summaries$`summary  1`
+
+# Calculate t-value for 95% confidence interval
+t_975 <- qt(0.975, lmRidge_res$df1)
+
+# Create dataframe for coefficients and confidence intervals
+ridge_data <- as.data.frame(lmRidge_res$coefficients)
+ridge_data$conf.lo <- ridge_data$`Estimate (Sc)` - t_975 * ridge_data$`StdErr (Sc)`
+ridge_data$conf.hi <- ridge_data$`Estimate (Sc)` + t_975 * ridge_data$`StdErr (Sc)`
+
+# Add Variable column
+ridge_data$Variable <- row.names(ridge_data)
+
+# Remove Intercept row
+ridge_data <- filter(ridge_data, Variable != 'Intercept')
+```
+
+### Ridge Regression Visual
+```{r fig.height = 3.1, fig.width = 6.2}
+ridge_data.sorted = ridge_data[order(ridge_data$`Estimate (Sc)`, decreasing = TRUE),]
+ridge_data.sorted$Variable = factor(ridge_data.sorted$Variable, levels = ridge_data.sorted$Variable)
+ridge_data.sorted$corrected_p = p.adjust(ridge_data.sorted$`Pr(>|t|)`, method = 'holm')
+
+ggplot(ridge_data.sorted, aes(x = Variable, y = `Estimate (Sc)`)) +
+  geom_point(size = 1) +
+  geom_hline(yintercept = 0, linetype = 2, size = 1) +
+  geom_errorbar(aes(ymin = conf.lo, ymax = conf.hi), width = 0.5) +
+  theme_classic() +
+  theme(legend.position="none",
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(angle = 75, size = 8, hjust = 1),
+    axis.text.y = element_text(size = 10)) +
+  ylab('Ridge Coefficient (rescaled)')
+
+ridge_data.sorted.export = ridge_data.sorted %>%
+  mutate_if(is.numeric, round, digits=3) %>%
+  select(-c(Estimate, conf.hi,conf.lo))
+
+colnames(ridge_data.sorted.export) = c('Coefficient', 'SE', 't', 'p','Regressor','Corrected p')
+
+ridge_data.sorted.export = ridge_data.sorted.export %>%
+  dplyr::select(c('Regressor', 'Coefficient', 'SE', 't', 'p','Corrected p'))
+
+rtffile = RTF("ridge_viz.doc")  # this can be an .rtf or a .doc
+addTable(rtffile, ridge_data.sorted.export )
+done(rtffile)
+
+```
